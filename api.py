@@ -44,16 +44,14 @@ HADİSE_SOZLUGU = {
 }
 
 
-# GÜVENLİ İSTEK ATICI (MGM Çökerse Kod Patlamaz)
+# GÜVENLİ İSTEK ATICI
 def safe_mgm_request(url):
     try:
         response = requests.get(url, headers=HEADERS, timeout=8)
 
-        # MGM 200 dönmediyse veya yanıt boşsa
         if response.status_code != 200:
             return None, f"MGM Servis Hatası (HTTP {response.status_code})"
 
-        # JSON Parse kontrolü (MGM Bazen HTML hata sayfası döndürür)
         try:
             data = response.json()
             return data, None
@@ -86,6 +84,15 @@ def get_merkez_ids(il="Antalya", ilce="Kepez"):
 # ==========================================
 
 
+@app.route("/")
+def home():
+    return jsonify({
+        "status": "pong",
+        "message": "Hava Durumu API aktif ve çalışıyor!",
+        "endpoints": ["/ping", "/anlik", "/saatlik", "/gunluk"],
+    }), 200
+
+
 @app.route("/ping")
 def ping():
     return jsonify({"status": "pong", "message": "Sistem zehir gibi ayakta!"}), 200
@@ -106,14 +113,16 @@ def anlik():
             404,
         )
 
-    url = (
-        "https://servis.mgm.gov.tr/web/sondurumlar?merkezid="
-        + str(ids["merkezId"])
-    )
+    url = f"https://servis.mgm.gov.tr/web/sondurumlar?merkezid={ids['merkezId']}"
     data, err = safe_mgm_request(url)
 
     if err:
         return jsonify({"success": False, "error": err}), 500
+
+    if isinstance(data, list) and len(data) > 0:
+        kod = data[0].get("hadiseKodu")
+        if kod:
+            data[0]["hadiseAciklama"] = HADİSE_SOZLUGU.get(kod, kod)
 
     return jsonify({"success": True, "data": data})
 
@@ -133,14 +142,18 @@ def saatlik():
             404,
         )
 
-    url = (
-        "https://servis.mgm.gov.tr/web/tahminler/saatlik?istno="
-        + str(ids["saatlikTahminIstNo"])
-    )
+    url = f"https://servis.mgm.gov.tr/web/tahminler/saatlik?istno={ids['saatlikTahminIstNo']}"
     data, err = safe_mgm_request(url)
 
     if err:
         return jsonify({"success": False, "error": err}), 500
+
+    if isinstance(data, list) and len(data) > 0:
+        tahminler = data[0].get("tahmin", [])
+        for item in tahminler:
+            kod = item.get("hadise")
+            if kod:
+                item["hadiseAciklama"] = HADİSE_SOZLUGU.get(kod, kod)
 
     return jsonify({"success": True, "data": data})
 
@@ -160,22 +173,17 @@ def gunluk():
             404,
         )
 
-    url = (
-        "https://servis.mgm.gov.tr/web/tahminler/gunluk?istno="
-        + str(ids["gunlukTahminIstNo"])
-    )
+    url = f"https://servis.mgm.gov.tr/web/tahminler/gunluk?istno={ids['gunlukTahminIstNo']}"
     data, err = safe_mgm_request(url)
 
     if err:
         return jsonify({"success": False, "error": err}), 500
 
-    # HADİSE KODLARINI TÜRKÇE AÇIKLAMAYA ÇEVİRME
     if isinstance(data, list) and len(data) > 0:
         for i in range(6):
             hadise_key = f"hadiseGun{i}"
             if hadise_key in data[0]:
                 kod = data[0][hadise_key]
-                # Türkçe karşılığını ekle (Yoksa kodun kendisini yaz)
                 data[0][f"hadiseAciklamaGun{i}"] = HADİSE_SOZLUGU.get(kod, kod)
 
     return jsonify({"success": True, "data": data})
