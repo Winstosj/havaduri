@@ -18,6 +18,31 @@ HEADERS = {
     ),
 }
 
+# MGM HADİSE KODLARI SÖZLÜĞÜ (Kod -> Türkçe Açıklama)
+HADİSE_SOZLUGU = {
+    "A": "Açık",
+    "AB": "Az Bulutlu",
+    "PB": "Parçalı Bulutlu",
+    "CB": "Çok Bulutlu",
+    "HY": "Hafif Yağmurlu",
+    "Y": "Yağmurlu",
+    "KY": "Kuvvetli Yağmurlu",
+    "MSY": "Mevzi Sağanak Yağışlı",
+    "DY": "Dolu",
+    "KKY": "Karla Karışık Yağmur",
+    "HKY": "Hafif Kar Yağışlı",
+    "K": "Kar Yağışlı",
+    "SK": "Yoğun Kar Yağışlı",
+    "TSY": "Gökgürültülü Sağanak Yağışlı",
+    "SIS": "Sisli",
+    "PUS": "Puslu",
+    "DMN": "Dumanlı",
+    "KF": "Toz veya Kum Taşınımı",
+    "R": "Rüzgarlı",
+    "SCK": "Sıcak",
+    "SOG": "Soğuk",
+}
+
 
 # GÜVENLİ İSTEK ATICI (MGM Çökerse Kod Patlamaz)
 def safe_mgm_request(url):
@@ -38,7 +63,7 @@ def safe_mgm_request(url):
     except requests.exceptions.Timeout:
         return None, "MGM sunucusundan yanıt zaman aşımına uğradı (Timeout)."
     except requests.exceptions.RequestException as e:
-        return None, f"Baglanti hatasi: {str(e)}"
+        return None, f"Bağlantı hatası: {str(e)}"
 
 
 # MERKEZ ID ÇEKİCİ
@@ -144,10 +169,19 @@ def gunluk():
     if err:
         return jsonify({"success": False, "error": err}), 500
 
+    # HADİSE KODLARINI TÜRKÇE AÇIKLAMAYA ÇEVİRME
+    if isinstance(data, list) and len(data) > 0:
+        for i in range(6):
+            hadise_key = f"hadiseGun{i}"
+            if hadise_key in data[0]:
+                kod = data[0][hadise_key]
+                # Türkçe karşılığını ekle (Yoksa kodun kendisini yaz)
+                data[0][f"hadiseAciklamaGun{i}"] = HADİSE_SOZLUGU.get(kod, kod)
+
     return jsonify({"success": True, "data": data})
 
 
-# BEKLENMEYEN GLOBAL HATA YAKALAYICI (Sunucunun Çökmesini Engeller)
+# BEKLENMEYEN GLOBAL HATA YAKALAYICI
 @app.errorhandler(Exception)
 def handle_global_exception(e):
     return (
@@ -161,6 +195,5 @@ def handle_global_exception(e):
 
 
 if __name__ == "__main__":
-    # Render ortam portunu otomatik alır, yoksa 10000 açar
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
